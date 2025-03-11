@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLURM Job Script Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        h2 {
+            color: #4CAF50;
+            text-align: center;
+        }
+        label, select, input {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        input, select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background-color: #af4c4c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+
+            /* if giving display: flex, use the below options*/
+            /* align-items: center;
+            justify-content: center; */
+        }
+        button:hover {
+            background-color: #913939;
+        }
+        .time-input-container, .memory-input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .time-input-container input {
+            margin-bottom: 0;
+            width: 150px;
+        }
+        .memory-input-container input {
+            width: 200px;
+        }
+        .time-input-container select, .memory-input-container select {
+            width: 100px;
+        }
+        .nodelist-container {
+            margin-top: 10px;
+        }
+        .form-group {
+            width: 700px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        label {
+            font-weight: bold;
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        input:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 100%;
+            min-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="font-family: 'Arial', sans-serif; font-size: 28px; color: #2c3e50; text-align: center; font-weight: bold; margin-bottom: 15px;">
+        SLURM Job Script Generator
+    </h2>
+    
+    <p style="font-family: 'Arial', sans-serif; font-size: 18px; color: #7f8c8d; text-align: center; margin: 0 auto; max-width: 600px; padding: 10px; background-color: #ecf0f1; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
+        Change the options below as per your need and download the final script.
+    </p>
+    
+
+    <!-- Options form -->
+    <form id="slurmForm">
+        <div class="form-group">
+            <label for="jobName">Job Name:</label>
+            <input type="text" id="jobName" name="jobName" placeholder="Job name" value="myJob" onchange="generateScript()">
+        </div>
+
+        <div class="form-group">
+            <label for="numTasks">Number of Tasks:</label>
+            <input type="number" id="numTasks" name="numTasks" value="1" min="1" onchange="generateScript()">
+        </div>
+
+        <div class="form-group">
+            <label for="cpusPerTask">CPUs per Task (max 64):</label>
+            <input type="number" id="cpusPerTask" name="cpusPerTask" value="4" min="1" max="64" onchange="validateInput('cpusPerTask', 64); generateScript()">
+        </div>
+
+        <div class="form-group">
+            <label>Time Limit (max 21 days):</label>
+            <div class="time-input-container">
+                <input type="number" id="timeDays" name="timeDays" placeholder="Days" min="0" max="21" value="0" style="width: 60px;" onchange="validateInput('timeDays', 21); generateScript()">
+                <span>-</span>
+                <input type="text" id="timeHMS" name="timeHMS" placeholder="HH:MM" value="00:00" onchange="generateScript()">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="partition">Partition:</label>
+            <select id="partition" name="partition" onchange="updateNodelist(); generateScript()">
+                <option value="guru">guru</option>
+                <option value="mahaguru">mahaguru</option>
+            </select>
+        </div>
+
+        <div class="form-group" id="gpuOption" style="display: none;">
+            <label>Use GPU Node?</label>
+            <div style="display: flex; align-items: center;">
+                <div style="margin-right: 20px;">
+                    <input type="radio" id="gpuYes" name="gpu" value="yes" onchange="generateScript()" style="width: auto; display: inline-block; margin-right: 5px;">
+                    <span>Yes</span>
+                </div>
+                <div>
+                    <input type="radio" id="gpuNo" name="gpu" value="no" checked onchange="generateScript()" style="width: auto; display: inline-block; margin-right: 5px;">
+                    <span>No</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group nodelist-container">
+            <label for="nodelist">Node List:</label>
+            <select id="nodelist" name="nodelist" onchange="generateScript()">
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="memory">Memory per CPU (max 8 GB or 8192 MB):</label>
+            <div class="memory-input-container">
+                <input type="number" id="memory" name="memory" placeholder="Memory" value="4096" min="1" onchange="validateMemory(); generateScript()">
+                <select id="memoryUnit" name="memoryUnit" onchange="validateMemory(); generateScript()">
+                    <option value="MB">MB</option>
+                    <option value="GB">GB</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="outputFile">Output File:</label>
+            <input type="text" id="outputFile" name="outputFile" placeholder="slurm-%j.out" value="slurm-%j.out" onchange="generateScript()">
+        </div>
+
+        <div class="form-group">
+            <label for="errorFile">Error File:</label>
+            <input type="text" id="errorFile" name="errorFile" placeholder="slurm_error-%j.out" value="slurm_error-%j.out" onchange="generateScript()">
+        </div>
+
+        <div class="form-group">
+            <label for="customCode">Custom Code:</label>
+            <textarea id="customCode" name="customCode" rows="5" placeholder="Add code/program(s) to run here..." style="width: 100%;" onchange="generateScript()"></textarea>
+        </div>
+    </form>
+
+    <!-- Output script -->
+    <div class="output">
+        <h3>Generated SLURM Script</h3>
+        <pre id="slurmScript">
+#!/bin/bash
+# Default SLURM script will appear here...
+        </pre>
+    </div>
+    
+    <br>
+    
+    <!-- Download button -->
+    <button onclick="downloadScript()">
+        <img src="https://cdn-icons-png.flaticon.com/512/724/724933.png" 
+            alt="Download Icon" width="20" height="20" 
+            style="filter: invert(1);">
+        Download Script
+    </button>
+
+    <br>
+    <hr style="border: 0; height: 1px; background: #b8b8b8; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+
+    <footer style="text-align: center; margin-top: 20px; padding: 10px; font-size: 16px; color: #555;">
+        Developed by 
+        <a href="https://github.com/geek09rk" target="_blank" 
+            style="color: #2c3e50; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; transition: color 0.3s;">
+            Raghav Kataria
+            <img src="https://cdn.jsdelivr.net/npm/simple-icons@v7/icons/github.svg" alt="GitHub" width="20" height="20" 
+                style="filter: invert(15%); transition: transform 0.3s ease;">
+        </a>
+    </footer>
+
+</div>
+
+<script>
+    function updateNodelist() {
+        const partition = document.getElementById("partition").value;
+        const nodelistSelect = document.getElementById("nodelist");
+        const gpuOption = document.getElementById("gpuOption");
+        
+        nodelistSelect.innerHTML = "";
+        
+        if (partition === "mahaguru") {
+            const option = document.createElement("option");
+            option.value = "chela-g01";
+            option.textContent = "chela-g01";
+            nodelistSelect.appendChild(option);
+            
+            gpuOption.style.display = "block";
+        } else {
+            const systemOption = document.createElement("option");
+            systemOption.value = "";
+            systemOption.textContent = "System Decide";
+            nodelistSelect.appendChild(systemOption);
+
+            ["chela01", "chela02", "chela03", "chela04", "chela05"].forEach(node => {
+                const option = document.createElement("option");
+                option.value = node;
+                option.textContent = node;
+                nodelistSelect.appendChild(option);
+            });
+            
+            gpuOption.style.display = "none";
+        }
+        
+        generateScript();
+    }
+
+    function validateInput(id, maxValue) {
+        const input = document.getElementById(id);
+        if (parseInt(input.value) > maxValue) {
+            input.value = maxValue;
+        }
+    }
+
+    function validateMemory() {
+        const memoryInput = document.getElementById("memory");
+        const memoryUnit = document.getElementById("memoryUnit").value;
+        let memoryValue = parseInt(memoryInput.value);
+
+        if (memoryUnit === "GB") {
+            if (memoryValue < 1) {
+                memoryValue = 1;
+            } else if (memoryValue > 8) {
+                memoryValue = 8;
+            }
+        } else if (memoryUnit === "MB") {
+            if (memoryValue < 1) {
+                memoryValue = 1;
+            } else if (memoryValue > 8192) {
+                memoryValue = 8192;
+            }
+        }
+
+        memoryInput.value = memoryValue;
+        generateScript();
+    }
+
+    function generateScript() {
+        // Get the form values
+        const jobName = document.getElementById("jobName").value || "myJob";
+        const numTasks = document.getElementById("numTasks").value || "1";
+        const cpusPerTask = document.getElementById("cpusPerTask").value || "4";
+
+        const timeDays = parseInt(document.getElementById("timeDays").value) || 0;
+        const timeHMS = document.getElementById("timeHMS").value || "00:00";
+        const timeLimit = timeDays > 0 ? `${timeDays}-${timeHMS}` : timeHMS;
+
+        const partition = document.getElementById("partition").value;
+        const useGpu = document.querySelector('input[name="gpu"]:checked').value === "yes";
+        const nodelist = document.getElementById("nodelist").value;
+        let memory = document.getElementById("memory").value || "2048";
+        const memoryUnit = document.getElementById("memoryUnit").value;
+        
+        // Adjust memory value if unit is GB
+        if (memoryUnit === "GB" && memory === "4096") {
+            memory = "4";
+        }
+
+        const outputFile = document.getElementById("outputFile").value || "slurm-%j.out";
+        const errorFile = document.getElementById("errorFile").value || "slurm_error-%j.out";
+        const customCode = document.getElementById("customCode").value || "";
+
+        // Construct the SLURM script
+        let slurmScript = `#!/bin/bash\n`;
+        slurmScript += `#SBATCH --job-name=${jobName}\n`;
+        slurmScript += `#SBATCH --ntasks=${numTasks}\n`;
+        slurmScript += `#SBATCH --cpus-per-task=${cpusPerTask}\n`;
+        slurmScript += `#SBATCH --time=${timeLimit}\n`;
+        slurmScript += `#SBATCH --partition=${partition}\n`;
+        if (nodelist) {
+            slurmScript += `#SBATCH --nodelist=${nodelist}\n`;
+        }
+        if (partition === "mahaguru" && useGpu) {
+            slurmScript += "#SBATCH --gres=gpu:tesla:1\n";
+        }
+
+        slurmScript += `#SBATCH --mem-per-cpu=${memory}${memoryUnit}\n`;
+        slurmScript += `#SBATCH --output=${outputFile}\n`;
+        slurmScript += `#SBATCH --error=${errorFile}\n`;
+        slurmScript += `\n# Program(s) to execute\n`;
+        slurmScript += `${customCode}\n`;
+
+        // Display the script
+        document.getElementById("slurmScript").textContent = slurmScript;
+    }
+
+    function downloadScript() {
+        // Get the script text
+        const scriptText = document.getElementById("slurmScript").textContent;
+
+        // Create a blob with the script text
+        const blob = new Blob([scriptText], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+
+        // Create a link element and simulate a click to download the file
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "slurm_script.sh";
+        document.body.appendChild(a);
+        a.click();
+
+        // Clean up the DOM
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // Initialize the page
+    window.onload = function() {
+        document.getElementById("slurmForm").reset();
+        updateNodelist();
+        generateScript();
+    };
+</script>
+
+</body>
+</html>
